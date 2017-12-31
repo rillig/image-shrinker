@@ -17,15 +17,15 @@ class Args(parser: ArgParser) {
 
 fun main(args: Array<String>) {
     val args = Args(ArgParser(args))
-    if (!shrink(File(args.input), args.minLength, args.minOverlap, File(args.output))) {
+    if (!shrink(File(args.input), args.minLength, args.minOverlap, File(args.output), args.verbose)) {
         System.err.println("No shrinkable area found.")
         System.exit(1)
     }
 }
 
-fun shrink(source: File, minLength: Int, minOverlap: Int, target: File): Boolean {
+fun shrink(source: File, minLength: Int, minOverlap: Int, target: File, verbose: Boolean): Boolean {
     val img = RGBA(ImageIO.read(source))
-    val shrunk = shrink(img, minLength, minOverlap) ?: return false
+    val shrunk = shrink(img, minLength, minOverlap, verbose) ?: return false
     ImageIO.write(shrunk.toBufferedImage(), "png", target)
     return true
 }
@@ -34,9 +34,9 @@ fun shrink(source: File, minLength: Int, minOverlap: Int, target: File): Boolean
  * Shrinks an image by removing duplicate columns.
  * Pixels are only removed if there are [minLength] of the same color in a row.
  */
-fun shrink(img: RGBA, minLength: Int, minOverlap: Int): RGBA? {
+fun shrink(img: RGBA, minLength: Int, minOverlap: Int, verbose: Boolean): RGBA? {
     val nodes = findNodes(img, minLength)!!
-    val graph = Graph(nodes.toMutableSet(), minOverlap)
+    val graph = Graph(nodes.toMutableSet(), minOverlap, verbose)
 
     graph.optimize()
     if (graph.nodes.size <= 2) {
@@ -56,7 +56,7 @@ fun shrink(img: RGBA, minLength: Int, minOverlap: Int): RGBA? {
 }
 
 internal fun findNodes(img: RGBA, minLength: Int): Set<Node>? {
-    val nodes = mutableSetOf(Node(true, -1, 0, img.width, img.width, 0x00000000, 0, 0))
+    val nodes = mutableSetOf(Node(true, -1, 0, img.width, img.width, 0x00000000))
 
     fun addNodesFromRow(y: Int) {
         var eq = 1
@@ -66,7 +66,7 @@ internal fun findNodes(img: RGBA, minLength: Int): Set<Node>? {
             } else {
                 if (eq >= minLength) {
                     val start = x - (eq - 1)
-                    nodes += Node(false, y, start, x + 1, eq, img[x, y], 0, 0)
+                    nodes += Node(false, y, start, x + 1, eq, img[x, y])
                 }
                 eq = 1
             }
@@ -80,7 +80,7 @@ internal fun findNodes(img: RGBA, minLength: Int): Set<Node>? {
         }
     }
 
-    nodes += Node(true, img.height, 0, img.width, img.width, 0x00000000, 0, 0)
+    nodes += Node(true, img.height, 0, img.width, img.width, 0x00000000)
 
     return nodes.toSet()
 }
@@ -95,11 +95,9 @@ internal class Node(
         var start: Int,
         var end: Int,
         var len: Int,
-        val color: Int,
-        var deltaColor: Int,
-        var deltaX: Int
+        val color: Int
 ) {
-
+    var deltaColor = 0
     val prevs = mutableSetOf<Node>()
     val nexts = mutableSetOf<Node>()
 
@@ -121,14 +119,20 @@ internal class Node(
     }
 }
 
-internal class Graph(val nodes: MutableSet<Node>, private val minOverlap: Int) {
+internal class Graph(val nodes: MutableSet<Node>, private val minOverlap: Int, private val verbose: Boolean) {
+
+    private inline fun verbose(obj: Any) {
+        if (verbose) {
+            println(obj)
+        }
+    }
 
     fun optimize() {
         connectAdjacent()
         computeDeltaColor()
-        while (removeDead() or adjustLengths() or removeSmall() or adjustBoundsForMinOverlap()) {
+        while (removeUnreachable() or adjustLengths() or removeSmall() or adjustBoundsForMinOverlap()) {
         }
-        nodes.forEach(::println)
+        nodes.forEach(this::verbose)
     }
 
     private fun connectAdjacent() {
@@ -154,15 +158,16 @@ internal class Graph(val nodes: MutableSet<Node>, private val minOverlap: Int) {
             val minDelta = delta.values.min() ?: 2_000_000_000
             delta.filterValues { it != minDelta }.keys.forEach { disconnect(node, it) }
             node.deltaColor = minDelta
-            println("Updated deltaColor of $node")
+            verbose("Updated deltaColor of $node")
         }
     }
 
     private fun removeSmall(): Boolean {
         var changed = false
-        val minLength = nodes.filter { !it.fixed }.last().len
+        val minLength = nodes.last { !it.fixed }.len
         for (node in nodes.toList()) {
             if (node.len < minLength) {
+                verbose("Removing $node because it is too short")
                 remove(node)
                 changed = true
             }
@@ -170,11 +175,11 @@ internal class Graph(val nodes: MutableSet<Node>, private val minOverlap: Int) {
         return changed
     }
 
-    private fun removeDead(): Boolean {
+    private fun removeUnreachable(): Boolean {
         var changed = false
         for (node in nodes.toList()) {
             if (!node.fixed && (node.prevs.none { it.overlaps(node, minOverlap) } || node.nexts.none { it.overlaps(node, minOverlap) })) {
-                println("Removing $node")
+                verbose("Removing $node because it is unreachable")
                 remove(node)
                 changed = true
             }
@@ -189,7 +194,7 @@ internal class Graph(val nodes: MutableSet<Node>, private val minOverlap: Int) {
             val nextlen = node.nexts.map { it.len }.max() ?: continue
             val nlen = min(prevlen, nextlen)
             if (nlen < node.len) {
-                println("Setting length for $node from ${node.len} to $nlen")
+                verbose("Setting length for $node from ${node.len} to $nlen")
                 node.len = nlen
                 changed = true
             }
@@ -205,12 +210,12 @@ internal class Graph(val nodes: MutableSet<Node>, private val minOverlap: Int) {
             if (node.prevs.size == 1 && node.prevs.single().nexts.size == 1) {
                 val prev = node.prevs.single()
                 if (prev.start < minStart) {
-                    println("Adjusting start of $prev to $minStart from $node")
+                    verbose("Adjusting start of $prev to $minStart from $node")
                     prev.start = minStart
                     changed = true
                 }
                 if (prev.end > maxEnd) {
-                    println("Adjusting end of $prev to $maxEnd from $node")
+                    verbose("Adjusting end of $prev to $maxEnd from $node")
                     prev.end = maxEnd
                     changed = true
                 }
@@ -218,12 +223,12 @@ internal class Graph(val nodes: MutableSet<Node>, private val minOverlap: Int) {
             if (node.nexts.size == 1 && node.nexts.single().prevs.size == 1) {
                 val next = node.nexts.single()
                 if (next.start < minStart) {
-                    println("Adjusting start of $next to $minStart from $node")
+                    verbose("Adjusting start of $next to $minStart from $node")
                     next.start = minStart
                     changed = true
                 }
                 if (next.end > maxEnd) {
-                    println("Adjusting end of $next to $maxEnd from $node")
+                    verbose("Adjusting end of $next to $maxEnd from $node")
                     next.end = maxEnd
                     changed = true
                 }

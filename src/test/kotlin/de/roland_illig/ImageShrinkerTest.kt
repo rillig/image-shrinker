@@ -8,7 +8,7 @@ import javax.imageio.ImageIO
 
 class ImageShrinkerTest {
 
-    val softly = SoftAssertions()
+    private val softly = SoftAssertions()
 
     @AfterEach
     fun tearDown() {
@@ -17,7 +17,7 @@ class ImageShrinkerTest {
 
     @Test
     fun testNodeOverlaps() {
-        fun node(start: Int, end: Int, len: Int) = Node(false, 0, start, end, len, 0x00000000, 0, 0)
+        fun node(start: Int, end: Int, len: Int) = Node(false, 0, start, end, len, 0x00000000)
 
         softly.assertThat(node(140, 150, 10).overlaps(node(150, 160, 10), 1)).isFalse
         softly.assertThat(node(141, 151, 10).overlaps(node(150, 160, 10), 1)).isTrue
@@ -41,11 +41,11 @@ class ImageShrinkerTest {
                 "xxxx xxx xxx xxx", // 09:
                 "xxxxxxxxxxxxxxxx", // 10: merge 4
                 "..xxxxx   xxxxxx", // 11: split into 3
-                "...xxx     xxx  ", // 12: the dotted pixels are a dead end, only connected to the bottom
-                "...xxx          ", // 13: the right side is no dead end since the xxx overlaps with the spaces
+                "...xxx     xxx  ", // 12: the dotted pixels are unreachable from the top
+                "...xxx          ", // 13: the right side is reachable from the xxx above via a color-change
                 "xxxxxxxxxxxxxxxx") // 14:
         val nodes = findNodes(img, 3)!!
-        val graph = Graph(nodes.toMutableSet(), 2)
+        val graph = Graph(nodes.toMutableSet(), 2, false)
 
         graph.optimize()
 
@@ -59,7 +59,7 @@ class ImageShrinkerTest {
         val minLength = 20
         val minOverlap = 10
         val img = RGBA(ImageIO.read(File("screenshot.png")))
-        val shrunk = shrink(img, minLength, minOverlap)!!
+        val shrunk = shrink(img, minLength, minOverlap, false)!!
         ImageIO.write(shrunk.toBufferedImage(), "png", File("screenshot-marked.png"))
     }
 }
