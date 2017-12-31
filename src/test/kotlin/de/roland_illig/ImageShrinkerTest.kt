@@ -69,21 +69,21 @@ internal class ImageShrinkerTest {
     fun testBlocksInfoToGraph() {
         val img = parseRGBA(
                 "xxxxxxxxxxxxxxxx", // 00:
-                "   xxxxxxxxxxxxx", // 01: shorten
-                " xxxxxxxxxxxx   ", // 02: shift
-                "xxxxx    xxxxxxx", // 03: split into 2
+                "  xxxxxxxxxxxxxx", // 01: shorten
+                " xxxxxxxxxxxxxx ", // 02: shift
+                "xxxxx    xxxxxxx", // 03: split into 3
                 "xxxxxx    xxxxxx", // 04:
                 "xxxxxxx    xxxxx", // 05:
-                "    xxxxxxxxxx  ", // 06: merge 2
+                "    xxxxxxxxxx  ", // 06: merge
                 "xxxxxxxxxxxxxxxx", // 07: lengthen
                 "xxx xxx xxx xxxx", // 08: split into 4
                 "xxxx xxx xxx xxx", // 09:
                 "xxxxxxxxxxxxxxxx", // 10: merge 4
-                "  xxxxx   xxxxxx", // 11: split into 2
-                "   xxx     xxx  ", // 12: dead end to the very left, only connected to the bottom
-                "   xxx          ", // 13: the right side is no dead end since the xxx overlaps with the spaces
+                "..xxxxx   xxxxxx", // 11: split into 3
+                "...xxx     xxx  ", // 12: the dotted pixels are a dead end, only connected to the bottom
+                "...xxx          ", // 13: the right side is no dead end since the xxx overlaps with the spaces
                 "xxxxxxxxxxxxxxxx") // 14:
-        val blocksInfo = findHLines(img, 3, 2)!!
+        val blocksInfo = findHLines(img, 3)!!
         val graph = blocksInfo.toGraph(2, img)
         graph.nodes.forEach {
             println(it)

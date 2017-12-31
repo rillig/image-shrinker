@@ -1,5 +1,6 @@
 package de.roland_illig
 
+import com.google.common.collect.HashBasedTable
 import com.xenomachina.argparser.ArgParser
 import com.xenomachina.argparser.default
 import java.io.File
@@ -56,7 +57,7 @@ fun shrink(img: RGBA, minLength: Int, minOverlap: Int, log: PrintWriter): RGBA? 
     val w = img.width
     val h = img.height
 
-    val info = findHLines(img, minLength, minOverlap) ?: return null
+    val info = findHLines(img, minLength) ?: return null
     val starts = reducePossibilities(info.blocks, info.maxLen, minOverlap, log)
 
     val resw = w - info.maxLen
@@ -79,7 +80,7 @@ fun markRedundantPixels(img: RGBA, minLength: Int, minOverlap: Int, log: PrintWr
     val w = img.width
     val h = img.height
 
-    val info = findHLines(img, minLength, minOverlap) ?: return null
+    val info = findHLines(img, minLength) ?: return null
     val starts = reducePossibilities(info.blocks, info.maxLen, minOverlap, log)
 
     val resw = w
@@ -94,8 +95,7 @@ fun markRedundantPixels(img: RGBA, minLength: Int, minOverlap: Int, log: PrintWr
     return res
 }
 
-internal fun findHLines(img: RGBA, minLength: Int, minOverlap: Int): BlocksInfo? {
-    val w = img.width
+internal fun findHLines(img: RGBA, minLength: Int): BlocksInfo? {
     val h = img.height
     val hlines = mutableListOf<MutableList<Node>>()
     for (y in 0 until h) {
@@ -103,9 +103,9 @@ internal fun findHLines(img: RGBA, minLength: Int, minOverlap: Int): BlocksInfo?
         if (rowBlocks.isEmpty()) {
             return null
         }
-        hlines += rowBlocks //merge(hlines.last(), rowBlocks, minOverlap)
+        hlines += rowBlocks
     }
-    return BlocksInfo(hlines, w)
+    return BlocksInfo(hlines)
 }
 
 private fun findHLinesInRow(img: RGBA, minLength: Int, y: Int): MutableList<Node> {
@@ -171,14 +171,18 @@ internal open class Node(val fixed: Boolean, val y: Int, var start: Int, var end
     }
 
     override fun toString(): String {
-        return "Node(fixed=$fixed, y=$y, start=$start, end=$end, len=$len, color=${String.format("%08x", color)}, prevs=${prevs.size}, nexts=${nexts.size})"
+        if (fixed) {
+            return "($start,$y len $len until $end prev ${prevs.size} next ${nexts.size})"
+        } else {
+            return "($start,$y len $len until $end color ${String.format("%08x", color)} prev ${prevs.size}, next ${nexts.size})"
+        }
     }
 }
 
 internal class Graph(val nodes: MutableSet<Node>, private val minOverlap: Int) {
 
     fun reduce() {
-        while (removeDead() || adjustLengths()) {
+        while (removeDead() or adjustLengths() or adjustBoundsForMinOverlap() or removeColorChanges()) {
         }
     }
 
@@ -209,6 +213,74 @@ internal class Graph(val nodes: MutableSet<Node>, private val minOverlap: Int) {
         return changed
     }
 
+    private fun adjustBoundsForMinOverlap(): Boolean {
+        var changed = false
+        for (node in nodes) {
+            val minStart = node.start - minOverlap
+            val maxEnd = node.end + minOverlap
+            if (node.prevs.size == 1 && node.prevs.single().nexts.size == 1) {
+                val prev = node.prevs.single()
+                if (prev.start < minStart) {
+                    println("Adjusting start of $prev to $minStart from $node")
+                    prev.start = minStart
+                    changed = true
+                }
+                if (prev.end > maxEnd) {
+                    println("Adjusting end of $prev to $maxEnd from $node")
+                    prev.end = maxEnd
+                    changed = true
+                }
+            }
+            if (node.nexts.size == 1 && node.nexts.single().prevs.size == 1) {
+                val next = node.nexts.single()
+                if (next.start < minStart) {
+                    println("Adjusting start of $next to $minStart from $node")
+                    next.start = minStart
+                    changed = true
+                }
+                if (next.end > maxEnd) {
+                    println("Adjusting end of $next to $maxEnd from $node")
+                    next.end = maxEnd
+                    changed = true
+                }
+            }
+        }
+        return changed
+    }
+
+    private fun removeColorChanges(): Boolean {
+
+        class Path {
+            var distance = 0
+            val nodes = mutableListOf<Node>()
+
+            fun copy() = Path().also { it.distance = distance; it.nodes += nodes }
+        }
+
+
+        var changed = false
+        val distances = HashBasedTable.create<Node, Node, Int>()
+        for (node in nodes) {
+            for (prev in node.prevs) {
+                val change = if (!node.fixed && !prev.fixed && node.color == prev.color) 0 else 1
+                for (ancestor in distances.row(prev).keys) {
+                    val prevDistance = node.prevs.flatMap { distances.row(it).filterKeys { it == ancestor }.values }.min() ?: 0
+                    val curDist = distances.get(node, ancestor)
+                    if (curDist == null || curDist > prevDistance + change) {
+                        distances.put(node, ancestor, prevDistance + change)
+                    }
+                }
+                distances.put(node, prev, change)
+            }
+        }
+        distances.rowMap().forEach { node, ancestors ->
+            ancestors.forEach { ancestor, distance ->
+                println("$distance color changes from $node to $ancestor")
+            }
+        }
+        return changed
+    }
+
     private fun remove(n: Node) {
         n.prevs.forEach { it.nexts -= n }
         n.nexts.forEach { it.prevs -= n }
@@ -218,7 +290,7 @@ internal class Graph(val nodes: MutableSet<Node>, private val minOverlap: Int) {
     }
 }
 
-internal class BlocksInfo(val blocks: MutableList<MutableList<Node>>, val width: Int) {
+internal class BlocksInfo(val blocks: MutableList<MutableList<Node>>) {
     val maxLen = blocks.last().map { it.len }.max()!!
 }
 

@@ -22,6 +22,8 @@ repositories {
 dependencies {
     compile "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
     compile 'com.xenomachina:kotlin-argparser:2.0.3'
+    compile 'com.google.guava:guava:23.5-jre'
+    compile 'org.jgrapht:jgrapht-core:1.1.0'
     testCompile "junit:junit:4.12"
     testCompile "org.assertj:assertj-core:3.8.0"
 }
