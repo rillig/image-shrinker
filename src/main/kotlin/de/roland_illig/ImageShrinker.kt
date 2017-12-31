@@ -118,7 +118,7 @@ private fun findHLinesInRow(img: RGBA, minLength: Int, y: Int): MutableList<Node
         } else {
             if (eq >= minLength) {
                 val start = x - (eq - 1)
-                blocks += Node(false, y, start, x + 1, eq, img[x, y])
+                blocks += Node(false, y, start, x + 1, eq, img[x, y], 0, 0)
             }
             eq = 1
         }
@@ -128,18 +128,18 @@ private fun findHLinesInRow(img: RGBA, minLength: Int, y: Int): MutableList<Node
 
 internal fun BlocksInfo.toGraph(minOverlap: Int, img: RGBA): Graph {
     val width = img.width
-    val root = Node(true, -1, 0, width, width, 0x00000000)
+    val root = Node(true, -1, 0, width, width, 0x00000000, 0, 0)
     val allNodes = mutableListOf(root)
     var prevRow = listOf(root)
     val surroundedBlocks = blocks.toMutableList().also {
-        it.add(mutableListOf(Node(true, blocks.lastIndex + 1, 0, width, width, 0x00000000)))
+        it.add(mutableListOf(Node(true, blocks.lastIndex + 1, 0, width, width, 0x00000000, 0, 0)))
     }
 
     surroundedBlocks.forEachIndexed { y, row ->
         val rowNodes = mutableListOf<Node>()
         for (block in row) {
             val color = if (y < img.height) img[block.start, y] else 0x00000000
-            val node = Node(y == surroundedBlocks.lastIndex, y, block.start, block.end, block.len, color)
+            val node = Node(y == surroundedBlocks.lastIndex, y, block.start, block.end, block.len, color, 0, 0)
             for (prev in prevRow) {
                 if (prev.overlaps(node, minOverlap)) {
                     node.prevs += prev
@@ -158,7 +158,16 @@ internal fun BlocksInfo.toGraph(minOverlap: Int, img: RGBA): Graph {
  * A contiguous block of [len] pixels,
  * somewhere between [start] (inclusive) and [end] (exclusive).
  */
-internal open class Node(val fixed: Boolean, val y: Int, var start: Int, var end: Int, var len: Int, val color: Int) {
+internal open class Node(
+        val fixed: Boolean,
+        val y: Int,
+        var start: Int,
+        var end: Int,
+        var len: Int,
+        val color: Int,
+        var colorChanges: Int,
+        var deltaX: Int
+) {
 
     val prevs = mutableSetOf<Node>()
     val nexts = mutableSetOf<Node>()
@@ -257,7 +266,6 @@ internal class Graph(val nodes: MutableSet<Node>, private val minOverlap: Int) {
             fun copy() = Path().also { it.distance = distance; it.nodes += nodes }
         }
 
-
         var changed = false
         val distances = HashBasedTable.create<Node, Node, Int>()
         for (node in nodes) {
@@ -308,7 +316,7 @@ private fun reducePossibilities(all: MutableList<MutableList<Node>>, maxLen: Int
 
     for (i in starts.indices.reversed()) {
         if (i > 0 && starts[i - 1].start < starts[i].start) {
-            val shifted = Node(false, i, starts[i].start, starts[i].start + maxLen, maxLen, starts[i].color)
+            val shifted = Node(false, i, starts[i].start, starts[i].start + maxLen, maxLen, starts[i].color, 0, 0)
             if (starts[i].isValidFor(i - 1) && all[i - 1].any { it.overlaps(shifted, minOverlap) }) {
                 starts[i - 1] = starts[i]
             }
@@ -317,7 +325,7 @@ private fun reducePossibilities(all: MutableList<MutableList<Node>>, maxLen: Int
 
     for (i in starts.indices) {
         if (i > 0 && starts[i].start < starts[i - 1].start) {
-            val shifted = Node(false, i, starts[i - 1].start, starts[i - 1].start + maxLen, maxLen, starts[i - 1].color)
+            val shifted = Node(false, i, starts[i - 1].start, starts[i - 1].start + maxLen, maxLen, starts[i - 1].color, 0, 0)
             if (starts[i - 1].isValidFor(i) && all[i].any { it.overlaps(shifted, minOverlap) }) {
                 starts[i] = starts[i - 1]
             }
@@ -333,7 +341,7 @@ internal fun merge(olds: List<Node>, news: List<Node>, minOverlap: Int): Mutable
     for (old in olds) {
         for (new in news) {
             if (old.overlaps(new, minOverlap)) {
-                val block = Node(false, new.y, new.start, new.end, min(old.len, new.len), new.color)
+                val block = Node(false, new.y, new.start, new.end, min(old.len, new.len), new.color, 0, 0)
                 var found = false
                 res.forEachIndexed { index, it ->
                     if (it.start == block.start && it.end == block.end) {

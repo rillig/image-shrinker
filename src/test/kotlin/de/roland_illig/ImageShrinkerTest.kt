@@ -1,24 +1,27 @@
 package de.roland_illig
 
-import org.assertj.core.api.JUnitSoftAssertions
-import org.junit.Rule
-import org.junit.Test
+import org.assertj.core.api.SoftAssertions
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Test
 import java.io.File
 import javax.imageio.ImageIO
 
-internal class ImageShrinkerTest {
+class ImageShrinkerTest {
 
-    @Rule
-    @JvmField
-    val softly = JUnitSoftAssertions()
+    val softly = SoftAssertions()
+
+    @AfterEach
+    fun tearDown() {
+        softly.assertAll()
+    }
 
     @Test
-    internal fun testMerge() {
+    fun testMerge() {
 
         class BlockAssertions(val ranges1: String, val ranges2: String) {
 
             infix fun isEqualTo(ranges: String) {
-                softly.assertThat(merge(parse(ranges1), parse(ranges2), 1)).isEqualTo(parse(ranges))
+                softly.assertThat(merge(parse(ranges1), parse(ranges2), 1).toString()).isEqualTo(parse(ranges).toString())
             }
 
             private fun parse(ranges: String): List<Node> {
@@ -27,7 +30,7 @@ internal class ImageShrinkerTest {
                     val start = ok[1].toInt()
                     val end = ok[2].toInt()
                     val len = if (ok[3] != "") ok[3].toInt() else end - start
-                    Node(false, 0, start, end, len, 0x00000000)
+                    Node(false, 0, start, end, len, 0x00000000, 0, 0)
                 }
             }
         }
@@ -56,7 +59,7 @@ internal class ImageShrinkerTest {
 
     @Test
     fun testNodeOverlaps() {
-        fun node(start: Int, end: Int, len: Int) = Node(false, 0, start, end, len, 0x00000000)
+        fun node(start: Int, end: Int, len: Int) = Node(false, 0, start, end, len, 0x00000000, 0, 0)
 
         softly.assertThat(node(140, 150, 10).overlaps(node(150, 160, 10), 1)).isFalse
         softly.assertThat(node(141, 151, 10).overlaps(node(150, 160, 10), 1)).isTrue
