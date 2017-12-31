@@ -16,48 +16,6 @@ class ImageShrinkerTest {
     }
 
     @Test
-    fun testMerge() {
-
-        class BlockAssertions(val ranges1: String, val ranges2: String) {
-
-            infix fun isEqualTo(ranges: String) {
-                softly.assertThat(merge(parse(ranges1), parse(ranges2), 1).toString()).isEqualTo(parse(ranges).toString())
-            }
-
-            private fun parse(ranges: String): List<Node> {
-                return ranges.split(Regex(",\\s*")).map {
-                    val ok = (Regex("""(\d+)-(\d+)(?:\((\d+)\))?""").matchEntire(it) ?: throw IllegalArgumentException(it)).groupValues
-                    val start = ok[1].toInt()
-                    val end = ok[2].toInt()
-                    val len = if (ok[3] != "") ok[3].toInt() else end - start
-                    Node(false, 0, start, end, len, 0x00000000, 0, 0)
-                }
-            }
-        }
-
-        fun assertMerged(ranges1: String, ranges2: String) = BlockAssertions(ranges1, ranges2)
-
-        // Completely equal
-        assertMerged("0-100", "0-100") isEqualTo "0-100"
-
-        // Fully overlapping
-        assertMerged("0-100", "0-50") isEqualTo "0-50"
-        assertMerged("0-100", "25-75") isEqualTo "25-75"
-        assertMerged("0-100", "50-100") isEqualTo "50-100"
-
-        // Partly overlapping
-        assertMerged("10-90", "0-50") isEqualTo "0-50"
-        assertMerged("10-90", "50-100") isEqualTo "50-100"
-
-        // Multiple ranges
-        assertMerged("0-5,10-20,22-30", "0-30") isEqualTo "0-30(10)"
-        assertMerged("0-20, 40-70", "10-60") isEqualTo "10-60(30)"
-        assertMerged("10-60", "0-20,40-70") isEqualTo "0-20, 40-70"
-        assertMerged("0-40, 30-70", "10-60") isEqualTo "10-60(40)"
-        assertMerged("10-60", "0-40,30-70") isEqualTo "0-40, 30-70"
-    }
-
-    @Test
     fun testNodeOverlaps() {
         fun node(start: Int, end: Int, len: Int) = Node(false, 0, start, end, len, 0x00000000, 0, 0)
 
@@ -86,28 +44,23 @@ class ImageShrinkerTest {
                 "...xxx     xxx  ", // 12: the dotted pixels are a dead end, only connected to the bottom
                 "...xxx          ", // 13: the right side is no dead end since the xxx overlaps with the spaces
                 "xxxxxxxxxxxxxxxx") // 14:
-        val blocksInfo = findHLines(img, 3)!!
-        val graph = blocksInfo.toGraph(img, 2)
-        graph.nodes.forEach {
-            println(it)
-        }
-        println("---")
-        graph.reduce()
-        graph.nodes.forEach {
-            println(it)
-        }
+        val nodes = findNodes(img, 3)!!
+        val graph = Graph(nodes.toMutableSet(), 2)
+
+        graph.optimize()
 
         ImageIO.write(img.toBufferedImage(), "png", File("testimage-0.png"))
-        graph.nodes.filter { !it.fixed }.forEach { node ->
-            for (x in node.start until node.end) {
-                if (x - node.start < node.len) {
-                    img[x, node.y] = 0xFF00FF00.toInt()
-                } else {
-                    img[x, node.y] = 0xFF80FF80.toInt()
-                }
-            }
-        }
+        img.markRedundantPixels(graph)
         ImageIO.write(img.toBufferedImage(), "png", File("testimage-1.png"))
+    }
+
+    @Test
+    fun testScreenshot() {
+        val minLength = 20
+        val minOverlap = 10
+        val img = RGBA(ImageIO.read(File("screenshot.png")))
+        val shrunk = shrink(img, minLength, minOverlap)!!
+        ImageIO.write(shrunk.toBufferedImage(), "png", File("screenshot-marked.png"))
     }
 }
 
@@ -119,4 +72,16 @@ fun parseRGBA(vararg pixels: String): RGBA {
         }
     }
     return img
+}
+
+internal fun RGBA.markRedundantPixels(graph: Graph) {
+    graph.nodes.filter { !it.fixed }.forEach { node ->
+        for (x in node.start until node.end) {
+            if (x - node.start < node.len) {
+                this[x, node.y] = 0xFF00FF00.toInt()
+            } else {
+                this[x, node.y] = 0xFF80FF80.toInt()
+            }
+        }
+    }
 }
