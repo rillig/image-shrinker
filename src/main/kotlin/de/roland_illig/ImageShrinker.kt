@@ -72,10 +72,6 @@ fun shrink(img: RGBA, minLength: Int, minOverlap: Int, log: PrintWriter): RGBA? 
     return res
 }
 
-/**
- * Shrinks an image by removing duplicate columns.
- * Pixels are only removed if there are [minLength] of the same color in a row.
- */
 fun markRedundantPixels(img: RGBA, minLength: Int, minOverlap: Int, log: PrintWriter): RGBA? {
     val w = img.width
     val h = img.height
@@ -83,12 +79,10 @@ fun markRedundantPixels(img: RGBA, minLength: Int, minOverlap: Int, log: PrintWr
     val info = findHLines(img, minLength) ?: return null
     val starts = reducePossibilities(info.blocks, info.maxLen, minOverlap, log)
 
-    val resw = w
-    val resh = h // TODO
-    val res = RGBA(resw, resh)
-    for (y in 0 until resh) {
+    val res = RGBA(w, h)
+    for (y in 0 until h) {
         val start = starts[y]
-        for (x in 0 until resw) {
+        for (x in 0 until w) {
             res[x, y] = if (x in start until start + info.maxLen) 0x00FF00 else img[x, y]
         }
     }
@@ -126,7 +120,7 @@ private fun findHLinesInRow(img: RGBA, minLength: Int, y: Int): MutableList<Node
     return blocks
 }
 
-internal fun BlocksInfo.toGraph(minOverlap: Int, img: RGBA): Graph {
+internal fun BlocksInfo.toGraph(img: RGBA, minOverlap: Int): Graph {
     val width = img.width
     val root = Node(true, -1, 0, width, width, 0x00000000, 0, 0)
     val allNodes = mutableListOf(root)
@@ -158,14 +152,14 @@ internal fun BlocksInfo.toGraph(minOverlap: Int, img: RGBA): Graph {
  * A contiguous block of [len] pixels,
  * somewhere between [start] (inclusive) and [end] (exclusive).
  */
-internal open class Node(
+internal class Node(
         val fixed: Boolean,
         val y: Int,
         var start: Int,
         var end: Int,
         var len: Int,
         val color: Int,
-        var colorChanges: Int,
+        var deltaColor: Int,
         var deltaX: Int
 ) {
 

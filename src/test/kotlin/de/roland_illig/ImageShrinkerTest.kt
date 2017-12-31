@@ -87,7 +87,7 @@ class ImageShrinkerTest {
                 "...xxx          ", // 13: the right side is no dead end since the xxx overlaps with the spaces
                 "xxxxxxxxxxxxxxxx") // 14:
         val blocksInfo = findHLines(img, 3)!!
-        val graph = blocksInfo.toGraph(2, img)
+        val graph = blocksInfo.toGraph(img, 2)
         graph.nodes.forEach {
             println(it)
         }
