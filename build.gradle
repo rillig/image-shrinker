@@ -16,10 +16,12 @@ apply plugin: 'kotlin'
 
 repositories {
     mavenCentral()
+    jcenter()
 }
 
 dependencies {
     compile "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
+    compile 'com.xenomachina:kotlin-argparser:2.0.3'
     testCompile "junit:junit:4.12"
     testCompile "org.assertj:assertj-core:3.8.0"
 }
