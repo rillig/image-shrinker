@@ -15,8 +15,9 @@ class Args(parser: ArgParser) {
     val input by parser.positional("SOURCE", help = "source image file")
 }
 
-fun main(args: Array<String>) {
-    val args = Args(ArgParser(args))
+fun main(args: Array<String>) = main(Args(ArgParser(args)))
+
+private fun main(args: Args) {
     if (!shrink(File(args.input), args.minLength, args.minOverlap, File(args.output), args.verbose)) {
         System.err.println("No shrinkable area found.")
         System.exit(1)
@@ -109,11 +110,11 @@ internal class Node(
     }
 
     override fun toString(): String {
-        if (fixed) {
-            return "(%2d,%2d len %2d until %2d prev %d next %d deltaColor %d)"
+        return if (fixed) {
+            "(%2d,%2d len %2d until %2d prev %d next %d deltaColor %d)"
                     .format(start, y, len, end, prevs.size, nexts.size, deltaColor)
         } else {
-            return "(%2d,%2d len %2d until %2d color %08x prev %d next %d deltaColor %d)"
+            "(%2d,%2d len %2d until %2d color %08x prev %d next %d deltaColor %d)"
                     .format(start, y, len, end, color, prevs.size, nexts.size, deltaColor)
         }
     }
@@ -121,7 +122,7 @@ internal class Node(
 
 internal class Graph(val nodes: MutableSet<Node>, private val minOverlap: Int, private val verbose: Boolean) {
 
-    private inline fun verbose(obj: Any) {
+    private fun verbose(obj: Any) {
         if (verbose) {
             println(obj)
         }
