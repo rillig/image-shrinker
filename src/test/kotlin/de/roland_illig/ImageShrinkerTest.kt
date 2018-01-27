@@ -1,5 +1,6 @@
 package de.roland_illig
 
+import org.assertj.core.api.Assertions
 import org.assertj.core.api.SoftAssertions
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
@@ -49,9 +50,24 @@ class ImageShrinkerTest {
 
         graph.optimize()
 
-        ImageIO.write(img.toBufferedImage(), "png", File("testimage-0.png"))
         img.markRedundantPixels(graph)
-        ImageIO.write(img.toBufferedImage(), "png", File("testimage-1.png"))
+
+        Assertions.assertThat(img.toCharacters()).isEqualTo("" +
+                "///--------xxxxx\n" +
+                "  ///----xxxxxxx\n" +
+                " ///---xxxxxxxx \n" +
+                "///--    xxxxxxx\n" +
+                "///---    xxxxxx\n" +
+                "xx///--    xxxxx\n" +
+                "    ///--xxxxx  \n" +
+                "xx///----xxxxxxx\n" +
+                "xxx /// xxx xxxx\n" +
+                "xxxx /// xxx xxx\n" +
+                "xxx///---xxxxxxx\n" +
+                "??///--   xxxxxx\n" +
+                "???///     xxx  \n" +
+                "???///          \n" +
+                "x///----xxxxxxxx\n")
     }
 
     @Test
@@ -72,6 +88,32 @@ fun parseRGBA(vararg pixels: String): RGBA {
         }
     }
     return img
+}
+
+fun RGBA.toCharacters(): String {
+    val sb = StringBuilder()
+    for (y in 0 until height) {
+        for (x in 0 until width) {
+            val pixel = get(x, y)
+            if (pixel == 0xFF787878.toInt()) {
+                sb += 'x'
+            } else if (pixel == 0xFF202020.toInt()) {
+                sb += ' '
+            } else if (pixel == 0xFF00FF00.toInt()) {
+                sb += '/'
+            } else if (pixel == 0xFF80FF80.toInt()) {
+                sb += '-'
+            } else {
+                sb += '?'
+            }
+        }
+        sb += '\n'
+    }
+    return sb.toString()
+}
+
+operator fun StringBuilder.plusAssign(c: Char) {
+    append(c)
 }
 
 internal fun RGBA.markRedundantPixels(graph: Graph) {
